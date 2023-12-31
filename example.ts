@@ -20,7 +20,7 @@
     carves[1] creates a file foo.y with the second word from our artifact string array
     
     calling 'artifact({ trigger, acquire, carves, lock })'
-    or rather this file causes us to 'compile the contract' and extract some data from it
+    or rather running this file causes us to 'compile the contract' and extract some data from it
     only if we need to
     and avoiding race conditions while doing so 
     
@@ -40,29 +40,39 @@ const contractPath = `${contractDir}/foo.sol`
 const lock = `${cacheDir}/foo.lock`
 
 const trigger = async () => {
-    if (!(await Deno.stat(hashPath).catch(() => 0))) return true
-    return !!(new Deno.Command('md5deep', { args: ['-r', contractDir, '-x', hashPath] }).outputSync().stdout.length)
+    const stat = await Deno.stat(hashPath).catch(() => null)
+    if (!stat) return true
+    const args = ['-r', contractDir, '-x', hashPath]
+    const command = new Deno.Command('md5deep', { args })
+    const { stdout: { length } } = await command.output()
+    return !!length
+}
+
+const compile = async () => {
+    await new Promise(r => setTimeout(r, 2000))
+    const text = await Deno.readTextFile(contractPath)
+    return text.split(' ')
+}
+
+const cache = async () => {
+    const args = ['-r', contractDir]
+    const command =  new Deno.Command('md5deep', { args })
+    const { stdout } = await command.output()
+    await Deno.writeFile(hashPath, stdout)
 }
 
 const acquire = async () => {
-    const compile = async () => {
-        await new Promise(r => setTimeout(r, 2000))
-        return (await Deno.readTextFile(contractPath)).split(' ')
-    }
-    const cache = async () => {
-        const cmd =  new Deno.Command('md5deep', { args: ['-r', contractDir] })
-        const out = await cmd.output()
-        await Deno.writeFile(hashPath, out.stdout)
-    }
     return (await Promise.all([compile(), cache()]))[0]
 }
 
 const fn0 = async ([x, _]:string[]) => {
-    await Deno.writeFile(xPath, new TextEncoder().encode(x))
+    const data = new TextEncoder().encode(x)
+    await Deno.writeFile(xPath, data)
 }
 
 const fn1 = async ([_, y]:string[]) => {
-    await Deno.writeFile(yPath, new TextEncoder().encode(y))
+    const data = new TextEncoder().encode(y)
+    await Deno.writeFile(yPath, data)
 }
 
 const carves = [fn0, fn1]
